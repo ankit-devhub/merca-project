@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google-cloud/bigquery": "^8.0.0",
+    "@google-cloud/storage": "^7.16.0",
     "@mantine/core": "5.10.5",
     "@mantine/hooks": "5.10.5",
     "@tailwindcss/forms": "^0.5.10",
@@ -18,9 +20,11 @@
     "apexcharts": "3.54.0",
     "autoprefixer": "^10.4.21",
     "axios": "^1.9.0",
+    "csvtojson": "^2.0.10",
     "dayjs": "^1.11.13",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
+    "googleapis": "^148.0.0",
     "lodash": "^4.17.21",
     "mantine-datatable": "1.7.35",
     "next": "15.3.1",

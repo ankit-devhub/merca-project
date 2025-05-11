@@ -17,8 +17,15 @@
 /.next/
 /out/
 
+
+#ignore google service account key
+key.json
+
 # production
 /build
+
+# tempfiles
+/file
 
 # misc
 .DS_Store
