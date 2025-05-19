@@ -4,8 +4,6 @@ import { formatStatusCount, groupTransactionsByCustomer } from '@/utils/formatte
 import dayjs from 'dayjs'
 import { getRule, getStatusName } from './rules'
 import { inputData } from '@/data/input'
-import path from 'path'
-import fs from 'fs';
 
 
 const transactionsGroupedByCustomer = groupTransactionsByCustomer(inputData)
@@ -87,261 +85,84 @@ export function generateStatusRecords(
 }
 
 
-// export function generateStatusRecordsForAll(
-//   mode: OutputMode = 'evaluation'
-// ): PeriodRecord[] {
-//   const out: PeriodRecord[] = []
+export function generateStatusRecordsForAll(
+  mode: OutputMode = 'evaluation'
+): AsyncIterable<PeriodRecord> {
+  async function* gen() {
+    for (const customerId of Object.keys(transactionsGroupedByCustomer)) {
+      const txns = transactionsGroupedByCustomer[customerId];
+      if (!txns.length) continue;
 
-//   // Loop over all customers
-//   for (const customerId in transactionsGroupedByCustomer) {
-//     const transactions = transactionsGroupedByCustomer[customerId]
-//     if (!transactions || transactions.length === 0) continue
+      let status : string = STATUS.ACQUIRED;
+      let statusCount = 1;
+      let txnCount = 1;
+      let statusStart = dayjs(txns[0].IM01);
+      let windowStart = statusStart;
+      const today = dayjs();
 
-//     // Initial state for each customer
-//     let status: string = STATUS.ACQUIRED
-//     let statusCount = 1
-//     let txnCount = 1
-//     let statusStart = dayjs(transactions[0].IM01)
-//     let windowStart = statusStart
-//     const today = dayjs()
+      // always emit first‐purchase milestone
+      yield {
+        date: statusStart.format('YYYY-MM-DD'),
+        customerId,
+        orderId: txns[0].OM02,
+        transactionNo: txnCount,
+        statusStartDate: statusStart.format('YYYY-MM-DD'),
+        statusCount: formatStatusCount(statusCount),
+        status: getStatusName(status),
+      };
 
-//     // Push the first milestone (first transaction)
-//     out.push({
-//       date: statusStart.format('YYYY-MM-DD'),
-//       customerId,
-//       orderId: transactions[0].OM02,
-//       transactionNo: txnCount,
-//       statusStartDate: statusStart.format('YYYY-MM-DD'),
-//       statusCount: formatStatusCount(statusCount),
-//       status: getStatusName(status),
-//     })
+      while (windowStart.isBefore(today)) {
+        const rule = getRule(status)!;
+        const windowEnd = windowStart.add(rule.nextDate, 'day');
+        const periodEnd = windowEnd.isBefore(today) ? windowEnd : today;
 
-//     // Loop until today
-//     while (windowStart.isBefore(today)) {
-//       const rule = getRule(status)
-//       const windowEnd = windowStart.add(rule.nextDate, 'day')
-//       const periodEnd = windowEnd.isBefore(today) ? windowEnd : today
+        const found = txns.find(tx =>
+          dayjs(tx.IM01).isAfter(windowStart) &&
+          (dayjs(tx.IM01).isBefore(periodEnd) || dayjs(tx.IM01).isSame(periodEnd))
+        );
 
-//       const found = transactions.find(tx =>
-//         dayjs(tx.IM01).isAfter(windowStart) &&
-//         (dayjs(tx.IM01).isBefore(periodEnd) || dayjs(tx.IM01).isSame(periodEnd))
-//       )
+        const hasTxn = Boolean(found);
+        const txnDate = hasTxn ? dayjs(found!.IM01) : undefined;
+        const nextStatus = hasTxn ? rule.yes : rule.no;
+        const milestoneDate = hasTxn ? txnDate! : windowEnd;
 
-//       const hasTxn = Boolean(found)
-//       const txnDate = hasTxn ? dayjs(found!.IM01) : undefined
-//       const nextStatus = hasTxn ? rule.yes : rule.no
-//       const milestone = hasTxn ? txnDate! : windowEnd
-
-//       let ord: number | null = null
-//       let txnNo: number | null = null
-//       if (hasTxn) {
-//         txnCount++
-//         txnNo = txnCount
-//         ord = found!.OM02
-//       }
-
-//       const statusChanged = nextStatus !== status
-
-//       if (statusChanged) {
-//         status = nextStatus
-//         statusCount++
-//         statusStart = hasTxn ? txnDate! : windowEnd
-//       }
-
-//       const shouldPush =
-//         mode === 'evaluation' ||
-//         (mode === 'changes' && statusChanged)
-
-//       if (shouldPush) {
-//         out.push({
-//           date: milestone.format('YYYY-MM-DD'),
-//           customerId,
-//           orderId: ord,
-//           transactionNo: txnNo,
-//           statusStartDate: statusStart.format('YYYY-MM-DD'),
-//           statusCount: formatStatusCount(statusCount),
-//           status: getStatusName(status),
-//         })
-//       }
-
-//       windowStart = milestone
-//     }
-//   }
-//   return out
-// }
-
-const BATCH_SIZE = 1000;
-const OUTPUT_FILE = path.join('output.csv');
-
-// export function generateStatusRecordsForAll(
-//   mode: OutputMode = 'evaluation'
-// ): void {
-//   // Clear the output file
-//   fs.writeFileSync(OUTPUT_FILE, "date,customerId,orderId,transactionNo,statusStartDate,statusCount,status\n");
-
-//   // Process each customer in batches
-//   const customerIds = Object.keys(transactionsGroupedByCustomer);
-//   for (let i = 0; i < customerIds.length; i += BATCH_SIZE) {
-//     const batch = customerIds.slice(i, i + BATCH_SIZE);
-//     const batchRecords: PeriodRecord[] = [];
-
-//     for (const customerId of batch) {
-//       const transactions = transactionsGroupedByCustomer[customerId];
-//       if (!transactions || transactions.length === 0) continue;
-
-//       // Initial state for each customer
-//       let status: string = STATUS.ACQUIRED;
-//       let statusCount = 1;
-//       let txnCount = 1;
-//       let statusStart = dayjs(transactions[0].IM01);
-//       let windowStart = statusStart;
-//       const today = dayjs();
-
-//       // Push the first milestone (first transaction)
-//       batchRecords.push({
-//         date: statusStart.format('YYYY-MM-DD'),
-//         customerId,
-//         orderId: transactions[0].OM02,
-//         transactionNo: txnCount,
-//         statusStartDate: statusStart.format('YYYY-MM-DD'),
-//         statusCount: formatStatusCount(statusCount),
-//         status: getStatusName(status),
-//       });
-
-//       // Loop until today
-//       while (windowStart.isBefore(today)) {
-//         const rule = getRule(status);
-//         const windowEnd = windowStart.add(rule.nextDate, 'day');
-//         const periodEnd = windowEnd.isBefore(today) ? windowEnd : today;
-
-//         const found = transactions.find(tx =>
-//           dayjs(tx.IM01).isAfter(windowStart) &&
-//           (dayjs(tx.IM01).isBefore(periodEnd) || dayjs(tx.IM01).isSame(periodEnd))
-//         );
-
-//         const hasTxn = Boolean(found);
-//         const txnDate = hasTxn ? dayjs(found!.IM01) : undefined;
-//         const nextStatus = hasTxn ? rule.yes : rule.no;
-//         const milestone = hasTxn ? txnDate! : windowEnd;
-
-//         let ord: number | null = null;
-//         let txnNo: number | null = null;
-//         if (hasTxn) {
-//           txnCount++;
-//           txnNo = txnCount;
-//           ord = found!.OM02;
-//         }
-
-//         const statusChanged = nextStatus !== status;
-
-//         if (statusChanged) {
-//           status = nextStatus;
-//           statusCount++;
-//           statusStart = hasTxn ? txnDate! : windowEnd;
-//         }
-
-//         const shouldPush =
-//           mode === 'evaluation' ||
-//           (mode === 'changes' && statusChanged);
-
-//         if (shouldPush) {
-//           batchRecords.push({
-//             date: milestone.format('YYYY-MM-DD'),
-//             customerId,
-//             orderId: ord,
-//             transactionNo: txnNo,
-//             statusStartDate: statusStart.format('YYYY-MM-DD'),
-//             statusCount: formatStatusCount(statusCount),
-//             status: getStatusName(status),
-//           });
-//         }
-
-//         windowStart = milestone;
-//       }
-//     }
-
-//     // Append batch to file
-//     const csvData = batchRecords.map(r =>
-//       `${r.date},${r.customerId},${r.orderId || ''},${r.transactionNo || ''},${r.statusStartDate},${r.statusCount},${r.status}`
-//     ).join('\n');
-
-//     fs.appendFileSync(OUTPUT_FILE, csvData + '\n');
-//     console.log(`Processed batch ${i / BATCH_SIZE + 1} of ${Math.ceil(customerIds.length / BATCH_SIZE)}`);
-//   }
-// }
-
-
-export function generateStatusRecordsForAll(): AsyncIterable<PeriodRecord> {
-    async function* generate() {
-        for (const customerId in transactionsGroupedByCustomer) {
-            const transactions = transactionsGroupedByCustomer[customerId];
-            if (!transactions || transactions.length === 0) continue;
-
-            let status: string = STATUS.ACQUIRED;
-            let statusCount = 1;
-            let txnCount = 1;
-            let statusStart = dayjs(transactions[0].IM01);
-            let windowStart = statusStart;
-            const today = dayjs();
-
-            // First record
-            yield {
-                date: statusStart.format('YYYY-MM-DD'),
-                customerId,
-                orderId: transactions[0].OM02,
-                transactionNo: txnCount,
-                statusStartDate: statusStart.format('YYYY-MM-DD'),
-                statusCount: formatStatusCount(statusCount),
-                status: getStatusName(status),
-            };
-
-            // Loop until today
-            while (windowStart.isBefore(today)) {
-                const rule = getRule(status);
-                const windowEnd = windowStart.add(rule.nextDate, 'day');
-                const periodEnd = windowEnd.isBefore(today) ? windowEnd : today;
-
-                const found = transactions.find(tx =>
-                    dayjs(tx.IM01).isAfter(windowStart) &&
-                    (dayjs(tx.IM01).isBefore(periodEnd) || dayjs(tx.IM01).isSame(periodEnd))
-                );
-
-                const hasTxn = Boolean(found);
-                const txnDate = hasTxn ? dayjs(found!.IM01) : undefined;
-                const nextStatus = hasTxn ? rule.yes : rule.no;
-                const milestone = hasTxn ? txnDate! : windowEnd;
-
-                let ord: number | null = null;
-                let txnNo: number | null = null;
-                if (hasTxn) {
-                    txnCount++;
-                    txnNo = txnCount;
-                    ord = found!.OM02;
-                }
-
-                const statusChanged = nextStatus !== status;
-
-                if (statusChanged) {
-                    status = nextStatus;
-                    statusCount++;
-                    statusStart = hasTxn ? txnDate! : windowEnd;
-                }
-
-                yield {
-                    date: milestone.format('YYYY-MM-DD'),
-                    customerId,
-                    orderId: ord,
-                    transactionNo: txnNo,
-                    statusStartDate: statusStart.format('YYYY-MM-DD'),
-                    statusCount: formatStatusCount(statusCount),
-                    status: getStatusName(status),
-                };
-
-                windowStart = milestone;
-            }
+        let ord: number | null = null;
+        let txnNo: number | null = null;
+        if (hasTxn) {
+          txnCount++;
+          txnNo = txnCount;
+          ord = found!.OM02;
         }
+
+        const statusChanged = nextStatus !== status;
+        if (statusChanged) {
+          status = nextStatus;
+          statusCount++;
+          statusStart = hasTxn ? txnDate! : windowEnd;
+        }
+
+        // decide whether to emit this milestone
+        const shouldPush =
+          mode === 'evaluation' ||
+          (mode === 'changes' && statusChanged);
+
+        if (shouldPush) {
+          yield {
+            date: milestoneDate.format('YYYY-MM-DD'),
+            customerId,
+            orderId: ord,
+            transactionNo: txnNo,
+            statusStartDate: statusStart.format('YYYY-MM-DD'),
+            statusCount: formatStatusCount(statusCount),
+            status: getStatusName(status),
+          };
+        }
+
+        windowStart = milestoneDate;
+      }
     }
-    return generate();
+  }
+  return gen();
 }
 
 
@@ -407,4 +228,59 @@ export function generateOutput2(
       ? dm
       : dayjs(a.startDate).diff(dayjs(b.startDate))
   })
+}
+
+
+
+
+
+export function* generateMonthlyOutputForAll(): Iterable<MonthlyOutput> {
+  for (const customerId of Object.keys(transactionsGroupedByCustomer)) {
+    const changes = generateStatusRecords(customerId, 'changes');
+    if (!changes.length) continue;
+    const segments = changes.map((m, i) => {
+      const start = dayjs(m.date);
+      const end   = i + 1 < changes.length
+        ? dayjs(changes[i + 1].date).subtract(1, 'day')
+        : dayjs();
+      return {
+        customerId,
+        start,
+        end,
+        statusStartDate: m.statusStartDate,
+        statusNumber:   m.statusCount,
+        status:         m.status,
+      };
+    });
+    let cursor     = segments[0].start.startOf('month');
+    const lastMonth= dayjs().startOf('month');
+
+    while (!cursor.isAfter(lastMonth)) {
+      const ms  = cursor.startOf('month');
+      const me  = cursor.endOf('month');
+      const key = ms.format('YYYY-MM');
+
+      for (const seg of segments) {
+        if (seg.end.isBefore(ms) || seg.start.isAfter(me)) continue;
+
+        const sliceStart = seg.start.isAfter(ms) ? seg.start : ms;
+        const sliceEnd   = seg.end.isAfter(me)   ? me         : seg.end;
+        const isFull     = sliceEnd.isSame(me, 'day');
+
+        yield {
+          month:           key,
+          customerId:      seg.customerId,
+          statusStartDate: seg.statusStartDate,
+          statusNumber:    seg.statusNumber,
+          status:          seg.status,
+          statusType:      isFull ? 'Final for Month' : 'Interim',
+          daysSpent:       sliceEnd.diff(sliceStart, 'day') + 1,
+          startDate:       sliceStart.format('YYYY-MM-DD'),
+          endDate:         sliceEnd.format('YYYY-MM-DD'),
+        };
+      }
+
+      cursor = cursor.add(1, 'month');
+    }
+  }
 }
