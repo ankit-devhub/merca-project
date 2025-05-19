@@ -19,11 +19,7 @@ const serviceKeyInstance = new google.auth.JWT(
   null,
 );
 
-google.options({
-  auth: serviceKeyInstance,
-});
-
-const drive = google.drive({ version: 'v3' });
+const drive = google.drive({ version: 'v3', auth: serviceKeyInstance });
 const bigquery = new BigQuery({
   projectId: CLOUD_SERVICE_KEY.project_id,
   credentials: {
@@ -37,12 +33,23 @@ const bigquery = new BigQuery({
 export const getFileRevisionList = async (fileId: string) => {
   const { data } = await drive.revisions.list({
     fileId: fileId,
-    fields: 'revisions(id, modifiedTime, originalFilename)',
+    fields: 'revisions(id, modifiedTime, originalFilename, mimeType, size)',
   });
   return data.revisions.map(({ modifiedTime, ...rest }, i) => ({
     ...rest,
     modifiedTime: dayjs(modifiedTime).format('YYYYMMDDHHMM'),
   }));
+}
+
+export const getfilepublicaccessibleUrl = async (fileId: string, revision?: string) => {
+  const {data} = await drive.files.export({
+    fileId,
+    // revisionId: revision,
+    fields: 'webViewLink, webContentLink, id, exportLinks',
+    mimeType: 'text/csv',
+  });
+
+  return data
 }
 
 
@@ -87,7 +94,7 @@ export const downloadAllRevisionsFile = async (fileId: string, destDir: string, 
 
 export const loadFileToBigQuery = async (filePath: string, datasetId: string, tableId: string) => {
 
-  
+
 
   const metadata = {
     sourceFormat: 'CSV',
