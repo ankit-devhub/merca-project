@@ -1,4 +1,3 @@
-// src/app/api/raw-output-2/route.ts
 import { NextResponse } from 'next/server'
 import { generateOutput2 } from '@/lib/core'
 

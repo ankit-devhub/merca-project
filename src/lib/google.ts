@@ -1,14 +1,14 @@
 import { google } from 'googleapis'
-import serviceKey from './key.json';
 import path from 'path';
 import fs from 'fs';
 import dayjs from 'dayjs';
 import { BigQuery } from '@google-cloud/bigquery';
+import { CLOUD_SERVICE_KEY } from '../../env';
 
 const serviceKeyInstance = new google.auth.JWT(
-  serviceKey.client_email,
-  './key.json',
-  serviceKey.private_key,
+  CLOUD_SERVICE_KEY.client_email,
+  null,
+  CLOUD_SERVICE_KEY.private_key,
   [
     'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/drive.file',
@@ -24,7 +24,14 @@ google.options({
 });
 
 const drive = google.drive({ version: 'v3' });
-const bigquery = new BigQuery();
+const bigquery = new BigQuery({
+  projectId: CLOUD_SERVICE_KEY.project_id,
+  credentials: {
+    client_id: CLOUD_SERVICE_KEY.client_id,
+    client_email: CLOUD_SERVICE_KEY.client_email,
+    private_key: CLOUD_SERVICE_KEY.private_key,
+  },
+});
 
 
 export const getFileRevisionList = async (fileId: string) => {
@@ -80,6 +87,8 @@ export const downloadAllRevisionsFile = async (fileId: string, destDir: string, 
 
 export const loadFileToBigQuery = async (filePath: string, datasetId: string, tableId: string) => {
 
+  
+
   const metadata = {
     sourceFormat: 'CSV',
     skipLeadingRows: 1,
@@ -104,11 +113,11 @@ export const loadFileToBigQuery = async (filePath: string, datasetId: string, ta
     console.error('Error loading file to BigQuery:', error);
     throw new Error(`BigQuery load job failed: ${error}`);
   }
-  finally{
-    try{
+  finally {
+    try {
       await fs.promises.unlink(filePath)
     }
-    catch(e){
+    catch (e) {
       console.error('Error deleting file:', e);
     }
   }

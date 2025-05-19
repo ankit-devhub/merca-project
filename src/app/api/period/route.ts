@@ -1,4 +1,3 @@
-// src/app/api/raw-output-1/route.ts
 import { NextResponse } from 'next/server'
 import { generateStatusRecords } from '@/lib/core'
 
